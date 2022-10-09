@@ -1,13 +1,9 @@
 import { NextFunction, Request, Response } from 'express';
 
-import { verify, JwtPayload, TokenPayload } from 'jsonwebtoken';
+import { verify } from 'jsonwebtoken';
 
 import { returnFormat } from './utils';
-import AccessTokenInterface from './interfaces/AccessToken';
-
-declare module 'jsonwebtoken' {
-  export interface TokenPayload extends JwtPayload, AccessTokenInterface {}
-}
+// import AccessTokenInterface from './interfaces/AccessToken';
 
 export const requireLogin = async (
   req: Request,
@@ -18,24 +14,30 @@ export const requireLogin = async (
     const authorization = req.headers.authorization;
 
     if (!authorization) {
-      return returnFormat({ req, res, status: 401 });
+      return returnFormat({ req, res, status: 401, apiType: 'user' });
     }
 
     const tokenReceived = authorization.replace('Bearer ', '');
     if (!process.env.ACCESS_TOKEN) {
-      return returnFormat({ req, res, status: 400 });
+      return returnFormat({ req, res, status: 400, apiType: 'user' });
     }
 
-    const token = <TokenPayload>verify(tokenReceived, process.env.ACCESS_TOKEN);
-    if (!token) {
-      return returnFormat({ req, res, status: 401 });
-    }
+    try {
+      // hack: token type any is a hack
+      verify(tokenReceived, process.env.ACCESS_TOKEN, (err, token: any) => {
+        if (err) {
+          return returnFormat({ req, res, status: 401, apiType: 'user' });
+        }
 
-    const { firstName, lastName, userId, userName, type } = token;
-    req.user = { firstName, lastName, userId, userName, type };
-    next();
+        const { firstName, lastName, userId, userName, type } = token;
+        req.user = { firstName, lastName, userId, userName, type };
+        next();
+      });
+    } catch (error) {
+      return returnFormat({ req, res, status: 401, apiType: 'user' });
+    }
   } catch (err) {
-    return returnFormat({ req, res, status: 401 });
+    return returnFormat({ req, res, status: 401, apiType: 'user' });
   }
 };
 

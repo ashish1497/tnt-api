@@ -1,5 +1,6 @@
-import { Schema, model } from 'mongoose';
+import { Schema } from 'mongoose';
 
+import db from '../../db';
 import { OrderInterface } from '../../interfaces/OrderModel';
 
 const OrderModel = new Schema(
@@ -17,5 +18,5 @@ const OrderModel = new Schema(
   { timestamps: true }
 );
 
-const Order = model<OrderInterface>('Order', OrderModel);
+const Order = db.model<OrderInterface>('Order', OrderModel);
 export default Order;

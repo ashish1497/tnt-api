@@ -1,4 +1,5 @@
 import ReturnParams from './interfaces/ReturnResponse';
+import { apiLogger, orderLogger, userLogger } from './logger';
 
 const messageDefault: any = {
   200: 'Something went wrong',
@@ -13,22 +14,13 @@ export const returnFormat = ({
   req,
   res,
   status,
+  apiType = 'api',
   success = false,
   message,
-  error = '',
+  error,
   data,
 }: ReturnParams) => {
   try {
-    const statement = {
-      ip:
-        process.env.NODE_ENV !== 'production'
-          ? req.ip
-          : req.headers['x-real-ip'],
-      method: req.method,
-      url: req.originalUrl,
-    };
-    console.log(JSON.stringify(statement));
-
     const valuesFirst = {
       success,
       message: message || messageDefault[status] || 'Something went wrong',
@@ -38,13 +30,52 @@ export const returnFormat = ({
 
     //todo: use MessageResponse Type
     //  To remove null or empty values
-    const values = Object.fromEntries(
-      // eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
-      Object.entries(valuesFirst).filter(([key, val]) => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-        val !== (null || '');
-      })
+    let values = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      Object.entries(valuesFirst).filter(([_, v]) => v != (null || undefined))
     );
+    const statement = {
+      ip:
+        process.env.NODE_ENV !== 'production'
+          ? req.ip
+          : req.headers['x-real-ip'],
+      method: req.method,
+      url: req.originalUrl,
+      status: status,
+      response: JSON.stringify(values),
+    };
+
+    //logging
+    let lvl: 'general' | 'warn' | 'error';
+    if (status < 400) {
+      lvl = 'general';
+    } else if (status >= 400 && status < 500) {
+      lvl = 'warn';
+    } else if (status >= 500) {
+      lvl = 'error';
+    } else return;
+
+    if (apiType === 'user') {
+      userLogger.log({
+        level: lvl,
+        message: JSON.stringify(statement),
+      });
+    } else if (apiType === 'order') {
+      orderLogger.log({
+        level: lvl,
+        message: JSON.stringify(statement),
+      });
+    } else if (apiType === 'api') {
+      apiLogger.log({
+        level: lvl,
+        message: JSON.stringify(statement),
+      });
+    }
+
+    //Log in console if not in production
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(JSON.stringify(statement));
+    }
 
     return res.status(status).json(values);
   } catch (err) {

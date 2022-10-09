@@ -4,6 +4,7 @@ export default interface ReturnParams {
   req: Request;
   res: Response;
   status: number;
+  apiType: 'api' | 'user' | 'order';
   success?: boolean;
   message?: string;
   error?: string;

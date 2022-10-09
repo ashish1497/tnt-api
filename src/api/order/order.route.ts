@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+
 import ReturnParams from '../../interfaces/ReturnResponse';
 import { returnFormat } from '../../utils';
 import User from '../user/user.model';
@@ -33,11 +34,13 @@ interface AdminOrderUpdate {
 
 type OrderUpdate = UserOrderUpdate | DeliveryOrderUpdate | AdminOrderUpdate;
 
+const apiType = 'order';
+
 //create orders // only by user
 router.post('/', async (req: OrderRequest, res: Response) => {
   try {
     if (!req.user) {
-      return returnFormat({ req, res, status: 401 });
+      return returnFormat({ req, res, status: 401, apiType });
     }
 
     const { type } = req.user;
@@ -46,6 +49,7 @@ router.post('/', async (req: OrderRequest, res: Response) => {
         req,
         res,
         status: 400,
+        apiType,
         message: 'Only customer can create orders',
       });
     }
@@ -60,6 +64,7 @@ router.post('/', async (req: OrderRequest, res: Response) => {
       return returnFormat({
         req,
         res,
+        apiType,
         status: 400,
         message: 'There are no delivery partners associated yet',
       });
@@ -82,11 +87,13 @@ router.post('/', async (req: OrderRequest, res: Response) => {
     return returnFormat({
       req,
       res,
+      apiType,
       status: 201,
       message: 'Order created successfully',
     });
   } catch (error) {
-    return returnFormat({ req, res, status: 500 });
+    console.log(error);
+    return returnFormat({ req, res, status: 500, apiType });
   }
 });
 
@@ -98,6 +105,7 @@ router.get('/', async (req: Request, res: Response) => {
       return returnFormat({
         req,
         res,
+        apiType,
         status: 200,
         success: true,
         message: `Customer: Orders for ${req.user?.userName} retrieved`,
@@ -108,6 +116,7 @@ router.get('/', async (req: Request, res: Response) => {
       return returnFormat({
         req,
         res,
+        apiType,
         status: 200,
         success: true,
         message: `Delivery: Orders for ${req.user?.userName} retrieved`,
@@ -118,14 +127,15 @@ router.get('/', async (req: Request, res: Response) => {
       return returnFormat({
         req,
         res,
+        apiType,
         status: 200,
         success: true,
         message: `Admin: Orders for ${req.user?.userName} retrieved`,
         data: orders,
       });
-    } else return returnFormat({ req, res, status: 400 });
+    } else return returnFormat({ req, res, status: 400, apiType });
   } catch (error) {
-    return returnFormat({ req, res, status: 500 });
+    return returnFormat({ req, res, status: 500, apiType });
   }
 });
 
@@ -136,12 +146,12 @@ router.get(
     try {
       const { id } = req.params;
       if (!id || id.length < 1) {
-        return returnFormat({ req, res, status: 400 });
+        return returnFormat({ req, res, status: 400, apiType });
       }
 
       const order = await Order.findById(id).lean();
       if (!order) {
-        return returnFormat({ req, res, status: 404 });
+        return returnFormat({ req, res, status: 404, apiType });
       }
 
       if (
@@ -153,14 +163,15 @@ router.get(
         return returnFormat({
           req,
           res,
+          apiType,
           success: true,
           status: 200,
           message: `Order "${order._id}" retrieved`,
           data: order,
         });
-      } else return returnFormat({ req, res, status: 400 });
+      } else return returnFormat({ req, res, status: 400, apiType });
     } catch (error) {
-      return returnFormat({ req, res, status: 500 });
+      return returnFormat({ req, res, status: 500, apiType });
     }
   }
 );
@@ -174,11 +185,11 @@ router.put(
 
       const order = await Order.findById(req.params.id).lean();
       if (!order) {
-        return returnFormat({ req, res, status: 404 });
+        return returnFormat({ req, res, status: 404, apiType });
       }
       const { type: bodyType } = req.body;
       if (bodyType !== type) {
-        return returnFormat({ req, res, status: 400 });
+        return returnFormat({ req, res, status: 400, apiType });
       }
       //todo: userType is customer, can only update pickup and drop
       if (bodyType === 'user') {
@@ -195,6 +206,7 @@ router.put(
           return returnFormat({
             req,
             res,
+            apiType,
             status: 400,
             message: 'Database reject',
           });
@@ -203,6 +215,7 @@ router.put(
         return returnFormat({
           req,
           res,
+          apiType,
           status: 200,
           success: true,
           message: `Order "${order._id} updated successfully`,
@@ -223,6 +236,7 @@ router.put(
           return returnFormat({
             req,
             res,
+            apiType,
             status: 400,
             message: 'Database reject',
           });
@@ -231,6 +245,8 @@ router.put(
         return returnFormat({
           req,
           res,
+
+          apiType,
           status: 200,
           success: true,
           message: `Order "${order._id} updated successfully`,
@@ -253,6 +269,7 @@ router.put(
           return returnFormat({
             req,
             res,
+            apiType,
             status: 400,
             message: 'Database reject',
           });
@@ -261,15 +278,16 @@ router.put(
         return returnFormat({
           req,
           res,
+          apiType,
           status: 200,
           success: true,
           message: `Order "${order._id} updated successfully`,
         });
       } else {
-        return returnFormat({ req, res, status: 400 });
+        return returnFormat({ req, res, status: 400, apiType });
       }
     } catch (error) {
-      return returnFormat({ req, res, status: 500 });
+      return returnFormat({ req, res, status: 500, apiType });
     }
   }
 );
@@ -284,6 +302,7 @@ router.delete(
         return returnFormat({
           req,
           res,
+          apiType,
           status: 401,
           message: 'Only admins are allowed to delete',
         });
@@ -294,6 +313,7 @@ router.delete(
         return returnFormat({
           req,
           res,
+          apiType,
           status: 400,
           message: 'Database rejected',
         });
@@ -302,12 +322,13 @@ router.delete(
       return returnFormat({
         req,
         res,
+        apiType,
         status: 200,
         success: true,
         message: `Order "${req.params.id}" deleted successfully`,
       });
     } catch (error) {
-      return returnFormat({ req, res, status: 500 });
+      return returnFormat({ req, res, status: 500, apiType });
     }
   }
 );

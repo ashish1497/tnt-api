@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { sign } from 'jsonwebtoken';
+import { sign, verify, RefreshTokenLoad } from 'jsonwebtoken';
 
 import User from './user.model';
 import { returnFormat } from '../../utils';
@@ -14,6 +14,8 @@ interface RegisterBody {
   firstName: string;
   lastName: string;
   password: string;
+  username: string;
+  type: 'user' | 'delivery';
 }
 
 type RegisterRequest = Request<{}, ReturnParams, RegisterBody>;
@@ -25,11 +27,25 @@ interface LoginBody {
 
 type LoginRequest = Request<{}, ReturnParams, LoginBody>;
 
-const createUsername = async (fn: string, ln: string) => {
-  let result: string;
-  result = fn.toLowerCase() + ln.toLowerCase();
-  return result;
-};
+interface RefreshTokenBody {
+  refreshToken: string;
+}
+
+type TokenRequest = Request<{}, ReturnParams, RefreshTokenBody>;
+
+interface RefreshTokenDecoded {
+  username: string;
+}
+
+declare module 'jsonwebtoken' {
+  export interface RefreshTokenLoad extends JwtPayload, RefreshTokenDecoded {}
+}
+
+// const createUsername = async (fn: string, ln: string) => {
+//   let result: string;
+//   result = fn.toLowerCase() + ln.toLowerCase();
+//   return result;
+// };
 
 const hashPassword = async (password: string) => {
   const saltRounds: number = 10;
@@ -63,14 +79,15 @@ const createToken = async (
   return token;
 };
 
+const apiType = 'user';
+
 router.post(
   '/register',
   async (req: RegisterRequest, res: Response<ReturnParams>) => {
     try {
-      const { firstName, lastName, password } = req.body;
+      const { firstName, lastName, username, password, type } = req.body;
 
       //todo: validate
-      const username = await createUsername(firstName, lastName);
 
       const usernameExists = await User.findOne({ username: username }).lean();
       if (usernameExists) {
@@ -78,6 +95,7 @@ router.post(
           req,
           res,
           status: 400,
+          apiType,
           message: 'User already exists',
         });
       }
@@ -88,6 +106,7 @@ router.post(
         lastName,
         username,
         password: newPassword,
+        type,
       });
 
       await user.save();
@@ -95,12 +114,13 @@ router.post(
         req,
         res,
         status: 201,
+        apiType: 'user',
         message: 'User created successfully',
         success: true,
       });
     } catch (error) {
       // return internal error
-      return returnFormat({ req, res, status: 500 });
+      return returnFormat({ req, res, status: 500, apiType });
     }
   }
 );
@@ -120,6 +140,7 @@ router.post(
           req,
           res,
           status: 400,
+          apiType,
           message: 'User does not exists',
         });
       }
@@ -131,12 +152,15 @@ router.post(
           req,
           res,
           status: 400,
+          apiType,
           message: 'Wrong Password',
         });
       }
 
       //todo: create at and rt
-      const refreshData = { username: userExists.username };
+      const refreshData: RefreshTokenDecoded = {
+        username: userExists.username,
+      };
       const { firstName, lastName, username: userName, type } = userExists;
       const accessData: AccessTokenInterface = {
         userId: userExists._id.toString(),
@@ -158,14 +182,104 @@ router.post(
         res,
         success: true,
         status: 200,
+        apiType,
         message: 'Login Successful',
         data: data,
       });
     } catch (err) {
       // return internal error
-      return returnFormat({ req, res, status: 500 });
+      return returnFormat({ req, res, status: 500, apiType });
     }
   }
 );
 
-export default Router;
+router.post(
+  '/token',
+  async (req: TokenRequest, res: Response<ReturnParams>) => {
+    try {
+      const { refreshToken } = req.body;
+
+      //todo: validate
+
+      //todo: verify token
+      if (!process.env.REFRESH_TOKEN) {
+        return returnFormat({
+          req,
+          res,
+          status: 500,
+          apiType,
+        });
+      }
+
+      try {
+        // hack: token type any is a hack
+        verify(
+          refreshToken,
+          process.env.REFRESH_TOKEN,
+          async (err, token: any) => {
+            if (err) {
+              return returnFormat({ req, res, status: 401, apiType: 'user' });
+            }
+
+            const userInfo = await User.findOne({
+              username: token.username,
+            }).lean();
+            if (!userInfo) {
+              return returnFormat({ req, res, status: 400, apiType });
+            }
+
+            //todo: create at and send
+            const {
+              _id: id,
+              firstName,
+              lastName,
+              username: userName,
+              type,
+            } = userInfo;
+            const accessData: AccessTokenInterface = {
+              userId: id.toString(),
+              firstName,
+              lastName,
+              userName,
+              type,
+            };
+            const accessToken = await createToken(accessData, 'at');
+
+            //todo return at, rt and user
+            const data = {
+              accessToken,
+            };
+            return returnFormat({
+              req,
+              res,
+              apiType,
+              success: true,
+              status: 200,
+              message: 'Token retrieved',
+              data: data,
+            });
+          }
+        );
+      } catch (error) {
+        return returnFormat({ req, res, status: 400, apiType });
+      }
+      const decodedData = await (<RefreshTokenLoad>(
+        verify(refreshToken, process.env.REFRESH_TOKEN)
+      ));
+      if (!decodedData) {
+        return returnFormat({
+          req,
+          res,
+          status: 401,
+          apiType,
+        });
+      }
+    } catch (err) {
+      // return internal error
+      console.log(err);
+      return returnFormat({ req, res, status: 500, apiType });
+    }
+  }
+);
+
+export default router;

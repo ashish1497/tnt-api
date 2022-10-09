@@ -1,9 +1,8 @@
 # tag n trac api service
 
-- [ ] Oauth Protocol using google
-  - Google connect
-  - mongodb save
-  -
-- [ ] User api
-- [ ] Delivery APi
-- [ ] Admin API
+- [x] basic auth with jwt
+- [x] User api
+- [x] Delivery APi
+- [x] Admin API
+
+- [ ] move handlers to different file
